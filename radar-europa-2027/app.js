@@ -33,14 +33,24 @@ if(typeof document!=='undefined'){
   }).join('');
  }
  function drawChart(){
-  const key=$('history-route').value;
-  const rows=history.filter(h=>h.destination+'|'+h.period===key).sort((a,b)=>Date.parse(a.at)-Date.parse(b.at)).slice(-40);
-  $('history-table').innerHTML=rows.map(h=>`<tr><td>${esc(date(h.at))}</td><td>SSA → ${esc(h.destination)}</td><td>${esc(h.period)}</td><td>${money(h.price)}</td></tr>`).join('');
-  if(!rows.length){$('chart').innerHTML='<div class="chart-empty">O gráfico será formado pelas consultas reais.<small>Amostras de rotas e períodos diferentes não são conectadas.</small></div>';return}
-  const prices=rows.map(h=>h.price),min=Math.min(...prices),max=Math.max(...prices),spread=Math.max(200,max-min),first=Date.parse(rows[0].at),last=Date.parse(rows.at(-1).at);
-  const points=rows.map(h=>[55+(last===first?205:(Date.parse(h.at)-first)/(last-first)*410),125-(h.price-min)/spread*95]);
-  const line=points.map(p=>p.join(',')).join(' ');
-  $('chart').innerHTML=`<svg viewBox="0 0 500 165" role="img" aria-label="Histórico de tarifas de ${esc(key)}: ${rows.length} consultas, de ${esc(money(min))} a ${esc(money(max))}"><title>Histórico de preços; valores detalhados na tabela abaixo</title><text x="0" y="25" class="chart-label">${esc(money(max))}</text><text x="0" y="130" class="chart-label">${esc(money(min))}</text><polyline points="${line}" fill="none" stroke="#a6efbb" stroke-width="2"/>${points.map(([x,y],i)=>`<circle cx="${x}" cy="${y}" r="3" fill="#a6efbb"><title>${esc(date(rows[i].at))}: ${esc(money(rows[i].price))}</title></circle>`).join('')}<text x="55" y="155" class="chart-label">${esc(date(rows[0].at))}</text><text x="465" y="155" text-anchor="end" class="chart-label">${esc(date(rows.at(-1).at))}</text></svg>`;
+  const selection=$('history-route').value;
+  const [code,period='ambos']=selection.split('|');
+  const groups=['fev-mar','jul-ago'].filter(p=>period==='ambos'||p===period).map(p=>({
+    period:p,rows:history.filter(h=>h.destination===code&&h.period===p).sort((a,b)=>Date.parse(a.at)-Date.parse(b.at)).slice(-40)
+  })).filter(g=>g.rows.length);
+  const all=groups.flatMap(g=>g.rows).sort((a,b)=>Date.parse(a.at)-Date.parse(b.at));
+  $('history-table').innerHTML=all.map(h=>`<tr><td>${esc(date(h.at))}</td><td>SSA → ${esc(h.destination)}</td><td>${esc(h.period)}</td><td>${money(h.price)}</td></tr>`).join('');
+  if(!all.length){$('chart').innerHTML='<div class="chart-empty">Ainda não há consultas para esse período.<small>Os dados aparecerão após novas verificações.</small></div>';return}
+  const min=Math.min(...all.map(h=>h.price)),max=Math.max(...all.map(h=>h.price)),spread=Math.max(200,max-min);
+  const first=Math.min(...all.map(h=>Date.parse(h.at))),last=Math.max(...all.map(h=>Date.parse(h.at)));
+  const palette={'fev-mar':'#a6efbb','jul-ago':'#f1c784'};
+  const lines=groups.map(g=>{
+    const points=g.rows.map(h=>[55+(last===first?205:(Date.parse(h.at)-first)/(last-first)*410),125-(h.price-min)/spread*95]);
+    const color=palette[g.period];
+    return `<polyline points="${points.map(p=>p.join(',')).join(' ')}" fill="none" stroke="${color}" stroke-width="2"/>${points.map(([x,y],i)=>`<circle cx="${x}" cy="${y}" r="3.5" fill="${color}"><title>${esc(g.period)} · ${esc(date(g.rows[i].at))}: ${esc(money(g.rows[i].price))}</title></circle>`).join('')}`;
+  }).join('');
+  const legend=groups.map((g,i)=>`<circle cx="${55+i*145}" cy="12" r="4" fill="${palette[g.period]}"/><text x="${65+i*145}" y="15" class="chart-label">${g.period==='fev-mar'?'Fev / Mar':'Jul / Ago'}</text>`).join('');
+  $('chart').innerHTML=`<svg viewBox="0 0 500 165" role="img" aria-label="Histórico de ${esc(destinations[code]||code)}: ${all.length} consultas, ${groups.length} período(s)"><title>Comparação de tarifas por período. Detalhes na tabela abaixo.</title>${legend}<text x="0" y="35" class="chart-label">${esc(money(max))}</text><text x="0" y="130" class="chart-label">${esc(money(min))}</text>${lines}<text x="55" y="155" class="chart-label">${esc(date(all[0].at))}</text><text x="465" y="155" text-anchor="end" class="chart-label">${esc(date(all.at(-1).at))}</text></svg>`;
  }
  function render(){
   offers=validOffers(data);
@@ -70,10 +80,15 @@ if(typeof document!=='undefined'){
   $('notice-title').textContent=title;$('notice-text').textContent=text;
   for(const [period,id] of [['fev-mar','season-one'],['jul-ago','season-two']]){const rows=offers.filter(o=>o.period===period);$(id).textContent=rows.length?money(Math.min(...rows.map(o=>o.price))):'—'}
   const previous=$('history-route').value;$('history-route').replaceChildren();
-  const keys=[...new Set(history.map(h=>h.destination+'|'+h.period))].sort();
-  if(!keys.length){const option=document.createElement('option');option.textContent='Aguardando histórico';$('history-route').append(option)}
-  keys.forEach(key=>{const option=document.createElement('option');option.value=key;const [code,period]=key.split('|');option.textContent=destinations[code]+' · '+period;$('history-route').append(option)});
-  if(keys.includes(previous))$('history-route').value=previous;
+  const codes=[...new Set(history.map(h=>h.destination))].sort((a,b)=>destinations[a].localeCompare(destinations[b],'pt-BR'));
+  if(!codes.length){const option=document.createElement('option');option.textContent='Aguardando histórico';$('history-route').append(option)}
+  codes.forEach(code=>{
+    for(const [period,label] of [['ambos','Ambos os períodos'],['fev-mar','Fevereiro / Março'],['jul-ago','Julho / Agosto']]){
+      const option=document.createElement('option');option.value=code+'|'+period;option.textContent=destinations[code]+' · '+label;$('history-route').append(option);
+    }
+  });
+  if([...$('history-route').options].some(o=>o.value===previous))$('history-route').value=previous;
+  else if(codes.length)$('history-route').value=codes[0]+'|ambos';
   drawOffers();drawChart();
  }
  async function load(){
