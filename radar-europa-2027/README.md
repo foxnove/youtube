@@ -1,11 +1,15 @@
-# Radar Europa 2027 — painel público
+﻿# Radar Europa 2027
 
-## ✈️ Abrir o Radar Europa 2027
+Aplicativo: https://foxnove.github.io/youtube/radar-europa-2027/
 
-**[CLIQUE AQUI PARA ABRIR O RADAR EUROPA 2027](https://foxnove.github.io/youtube/radar-europa-2027/)**
+Painel público em HTML/CSS/JavaScript com filtros de destino, mês, preço, voos diretos e ausência de conexão doméstica, comparação de temporadas e histórico por rota/período. O gráfico usa SVG sem biblioteca externa. Fontes têm fallback local.
 
-> **Atenção:** esse endereço só funcionará depois de habilitar GitHub Pages para a branch `radar-europa-2027`. Ainda não há confirmação de que o site esteja publicado. Se aparecer 404, abra [Configurações do GitHub Pages](https://github.com/foxnove/youtube/settings/pages), selecione **Deploy from a branch**, branch **radar-europa-2027**, pasta **/(root)** e salve. Não é necessário pagar para publicar a partir deste repositório público.
+O backend privado consulta a Amadeus Flight Offers Search em produção e publica somente um snapshot de campos permitidos. Nenhum e-mail, chave, token, resposta bruta da API ou estado privado é publicado. A sincronização usa chave de deploy exclusiva deste repositório, protegida no backend.
 
-Este diretório contém somente a interface pública e dados de ofertas. **Não inclui e-mail, credenciais, destinatários, tokens ou configurações de envio de alertas.**
+Atualizar o painel relê o arquivo público; não executa uma pesquisa de voos. Resultados de teste e ofertas com mais de 24h não aparecem como tarifas válidas. As ofertas consultadas não são reservas ou preços garantidos. O endpoint não fornece links de compra, portanto nenhum link é inventado.
 
-O monitoramento e os segredos permanecem no repositório privado. **Nenhuma oferta real foi consultada até agora.**
+Origem SSA; janelas 20/02–31/03 e 01/07–31/08/2027. Destinos incluem LIS, MAD, CDG, ORY, OPO, FCO, MXP, BCN, FRA, AMS, ZAG, TIA e TBS; rotas adicionais BRU, DUB, LHR e VIE. Busca rotativa de datas e durações de 14, 18, 21 e 24 dias; cobertura parcial, limitada pela franquia configurada.
+
+Estado real e pendências são apresentados no painel. A integração de produção requer credenciais válidas da Amadeus; alertas precisam de configuração privada do Gmail. O GitHub exige workflow na branch padrão para cron, portanto a agenda de 6h permanece pendente enquanto as branches principais não puderem ser alteradas. Não foram modificadas as branches principais ou a visibilidade dos repositórios.
+
+Teste: `node --test radar-europa-2027/test-app.cjs`. Dados dentro do teste são fixtures isoladas; não são usados pelo aplicativo nem exportados no JSON.
