@@ -4,7 +4,7 @@ function validOffers(data,now=Date.now()){
  if(data.environment!=='production')return [];
  return (Array.isArray(data.offers)?data.offers:[]).filter(o=>o&&typeof o.price==='number'&&Number.isFinite(o.price)&&o.price>0&&o.currency==='BRL'&&destinations[o.destination]&&/^2027-\d{2}-\d{2}$/.test(o.departure)&&/^2027-\d{2}-\d{2}$/.test(o.return)&&Number.isFinite(Date.parse(o.checked_at))&&now-Date.parse(o.checked_at)<=86400000&&now-Date.parse(o.checked_at)>=-300000);
 }
-function filterOffers(offers,f){return offers.filter(o=>(!f.destination||o.destination===f.destination)&&(!f.month||o.departure.slice(5,7)===f.month)&&(!f.max||o.price<=Number(f.max))&&(!f.direct||o.direct===true)&&(!f.noDomestic||o.domestic_connection===false)).sort((a,b)=>a.price-b.price)}
+function filterOffers(offers,f){return offers.filter(o=>(!f.destination||o.destination===f.destination)&&(!f.month||o.departure.slice(5,7)===f.month)&&(!f.max||o.price<=Number(f.max))&&(!f.direct||(o.return_details_available===false?o.outbound_direct===true:o.direct===true))&&(!f.noDomestic||(o.return_details_available===false?o.outbound_domestic_connection===false:o.domestic_connection===false))).sort((a,b)=>a.price-b.price)}
 if(typeof module!=='undefined')module.exports={validOffers,filterOffers};
 if(typeof document!=='undefined'){
  const $=id=>document.getElementById(id);
@@ -12,9 +12,9 @@ if(typeof document!=='undefined'){
  const date=s=>s&&Number.isFinite(Date.parse(s))?new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short',timeZone:'America/Sao_Paulo'}).format(new Date(s)):'Não realizada';
  const day=s=>new Intl.DateTimeFormat('pt-BR',{day:'2-digit',month:'short',timeZone:'UTC'}).format(new Date(s+'T12:00:00Z'));
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
- const states={credentials_missing:'Credenciais pendentes',ok:'Última consulta concluída',partial:'Consulta parcial',error:'Falha na consulta',quota_exhausted:'Teto mensal atingido',test:'Ambiente de testes'};
+ const states={credentials_missing:'Credenciais pendentes',ok:'Última consulta concluída',partial:'Consulta parcial',error:'Falha na consulta',quota_exhausted:'Limite de consultas atingido',cooldown:'Intervalo de economia',test:'Ambiente de testes'};
  const emailStates={not_configured:'Configuração pendente',ready:'Configurado · envio não testado',sent:'Último envio confirmado',no_new_promotions:'Sem nova promoção para enviar',send_failed:'Falha no envio'};
- const errors={credentials_missing:'Credenciais de produção ausentes',monthly_budget_reached:'Teto local de requisições atingido',http_401:'Autenticação recusada',http_403:'Acesso à API recusado',http_429:'Limite de requisições da API',network_unavailable:'API indisponível ou sem conexão',invalid_json:'Resposta inválida da API',invalid_offer:'Oferta descartada por dados inválidos'};
+ const errors={credentials_missing:'Credenciais de produção ausentes',monthly_budget_reached:'Teto mensal de buscas atingido',daily_budget_reached:'Teto diário de buscas atingido',account_quota_exhausted:'Franquia gratuita indisponível',free_plan_required:'A busca foi bloqueada para evitar uso de plano pago',account_quota_unverified:'Não foi possível confirmar a franquia gratuita',serpapi_error:'A SerpApi não concluiu a pesquisa',http_401:'Autenticação recusada',http_403:'Acesso à API recusado',http_429:'Limite de requisições da API',network_unavailable:'API indisponível ou sem conexão',invalid_json:'Resposta inválida da API',invalid_offer:'Oferta descartada por dados inválidos'};
  let data={},offers=[],history=[],loading=false;
  Object.entries(destinations).forEach(([code,city])=>{const o=document.createElement('option');o.value=code;o.textContent=city+' · '+code;$('destination').append(o)});
  function drawOffers(){
@@ -25,9 +25,11 @@ if(typeof document!=='undefined'){
   $('empty').querySelector('p').textContent=offers.length?'Ajuste os filtros para ver outras passagens.':'As ofertas aparecem após uma consulta de produção e permanecem válidas no painel por até 24 horas. Nenhum preço é simulado.';
   $('offer-list').innerHTML=filtered.map(o=>{
    const connections=Array.isArray(o.connections)?o.connections.map(x=>Array.isArray(x)?x.join(' → '):'').filter(Boolean).join(' / '):'';
-   const duration=Array.isArray(o.durations)?o.durations.map(x=>String(x||'').replace(/^PT/,'').toLowerCase()).join(' / '):'Não informada';
+   const duration=Array.isArray(o.durations)?o.durations.map(x=>x?String(x).replace(/^PT/,'').toLowerCase():'a confirmar').join(' / '):'Não informada';
    const bags=Array.isArray(o.baggage)&&o.baggage.length?o.baggage.map(b=>b.quantity!==undefined?`${b.quantity} peça(s)`:`${b.weight??'—'} ${b.weightUnit??''}`).filter((x,i,a)=>a.indexOf(x)===i).join(' / '):'Não informada pela API';
-   return `<article class="offer"><div class="offer-top"><span class="route-code">SSA → ${esc(o.destination)}</span>${o.promotion?'<span class="deal">⚑ Promoção no radar</span>':''}</div><h3>${esc(destinations[o.destination])}</h3><div class="price">${money(o.price)}</div><div class="caption">POR PESSOA · IDA E VOLTA</div><div class="offer-info"><p>${esc(day(o.departure))} → ${esc(day(o.return))} · ${Math.round((Date.parse(o.return)-Date.parse(o.departure))/86400000)} dias</p><p>${esc((o.airline_names||o.airlines||[]).join(' · '))}</p><p class="route-tag">${o.direct?'Direto · ida e volta':o.domestic_connection?'Com conexão doméstica no Brasil':'Conexão internacional · sem conexão doméstica'}</p><p>Escalas ida / volta: ${esc((o.stops||[]).join(' / '))}${connections?' · '+esc(connections):''}</p><p>Duração ida / volta: ${esc(duration)}<br>Bagagem despachada: ${esc(bags)}</p><p>${o.change_percent!=null?'Variação: '+esc(o.change_percent)+'% · ':''}Menor histórico: ${money(o.historical_low||o.price)}</p><p>Consultado em ${esc(date(o.checked_at))}</p><small>Reconfirme preço e condições com a companhia. A fonte não fornece link de compra.</small></div></article>`;
+   const route=o.return_details_available===false?(o.outbound_direct?'Ida sem escalas · volta a confirmar':o.outbound_domestic_connection?'Ida com conexão no Brasil · volta a confirmar':'Ida com conexão internacional · volta a confirmar'):(o.direct?'Direto · ida e volta':o.domestic_connection?'Com conexão doméstica no Brasil':'Conexão internacional · sem conexão doméstica');
+   let source='';try{const u=new URL(o.source_url);if(u.protocol==='https:'&&['www.google.com','google.com'].includes(u.hostname)&&u.pathname.startsWith('/travel/flights'))source=`<p><a href="${esc(u.href)}" target="_blank" rel="noopener noreferrer">Consultar no Google Flights ↗</a></p>`}catch{}
+   return `<article class="offer"><div class="offer-top"><span class="route-code">SSA → ${esc(o.destination)}</span>${o.promotion?'<span class="deal">⚑ Promoção no radar</span>':''}</div><h3>${esc(destinations[o.destination])}</h3><div class="price">${money(o.price)}</div><div class="caption">POR PESSOA · IDA E VOLTA</div><div class="offer-info"><p>${esc(day(o.departure))} → ${esc(day(o.return))} · ${Math.round((Date.parse(o.return)-Date.parse(o.departure))/86400000)} dias</p><p>${esc((o.airline_names||o.airlines||[]).join(' · '))}</p><p class="route-tag">${route}</p><p>Escalas ida / volta: ${esc((o.stops||[]).map(n=>n==null?'a confirmar':n).join(' / '))}${connections?' · '+esc(connections):''}</p><p>Duração ida / volta: ${esc(duration)}<br>Bagagem despachada: ${esc(bags)}</p><p>${o.change_percent!=null?'Variação: '+esc(o.change_percent)+'% · ':''}Menor histórico: ${money(o.historical_low||o.price)}</p><p>Consultado em ${esc(date(o.checked_at))}</p>${source}<small>Reconfirme preço e condições.${o.return_details_available===false?' Preço de ida e volta; detalhes da volta não consultados para economizar buscas.':''}</small></div></article>`;
   }).join('');
  }
  function drawChart(){
@@ -46,8 +48,8 @@ if(typeof document!=='undefined'){
   const status=states[data.status]||'Estado não confirmado';
   const stale=data.last_success_at&&Date.now()-Date.parse(data.last_success_at)>86400000;
   $('api-badge').textContent=stale&&data.status==='ok'?'Dados desatualizados':status;
-  $('api-badge').classList.toggle('healthy',data.status==='ok'&&!stale);
-  $('api-state').textContent=status+' · '+(data.environment==='production'?'produção':data.environment==='test'?'testes':'ambiente não confirmado');
+  $('api-badge').classList.toggle('healthy',['ok','cooldown'].includes(data.status)&&!!data.last_success_at&&!stale);
+  $('api-state').textContent=(data.provider==='serpapi'?'SerpApi · Google Flights · ':'')+status+' · '+(data.environment==='production'?'produção':data.environment==='test'?'testes':'ambiente não confirmado');
   $('count').textContent=offers.length;
   $('count-caption').textContent=offers.length?'Consultadas nas últimas 24 horas':'Nenhuma oferta válida disponível';
   $('best').textContent=offers.length?money(Math.min(...offers.map(o=>o.price))):'—';
@@ -63,6 +65,7 @@ if(typeof document!=='undefined'){
   if(data.status==='ok'){title=stale?'Última consulta desatualizada':'Última consulta de produção concluída';text=stale?'As tarifas antigas não são apresentadas como ofertas válidas. Aguarde uma nova consulta.':`${data.successful_queries||0} pesquisas concluídas na rodada. A lista cobre uma amostra das datas e rotas, sujeita à disponibilidade e alteração de preços.`}
   else if(data.status==='partial'){title='Consulta parcialmente concluída';text='Parte das pesquisas falhou. Apenas ofertas válidas verificadas nas últimas 24 horas são exibidas.'}
   else if(['error','quota_exhausted'].includes(data.status)){title='Monitoramento interrompido';text='A última tentativa não foi concluída. Consulte o estado do sistema abaixo. Ofertas antigas expiram após 24 horas.'}
+  else if(data.status==='cooldown'){title='Intervalo de economia de buscas';text='A última pesquisa ocorreu há menos de 6 horas. O radar preserva as ofertas válidas e aguarda o próximo intervalo, sem consumir outra busca.'}
   else if(data.status==='test'){title='Ambiente de testes';text='Resultados de teste não são apresentados como tarifas reais de produção.'}
   $('notice-title').textContent=title;$('notice-text').textContent=text;
   for(const [period,id] of [['fev-mar','season-one'],['jul-ago','season-two']]){const rows=offers.filter(o=>o.period===period);$(id).textContent=rows.length?money(Math.min(...rows.map(o=>o.price))):'—'}

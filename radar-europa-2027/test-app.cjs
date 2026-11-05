@@ -13,3 +13,8 @@ test('combine destination, month, direct and price filters',()=>{
  assert.equal(radar.filterOffers(offers,{max:4000,noDomestic:true}).length,0);
  assert.equal(radar.filterOffers(offers,{})[0].destination,'MAD');
 });
+test('SerpApi filters use known outbound details without inventing return',()=>{
+ const partial={...offers[0],direct:null,domestic_connection:null,outbound_direct:true,outbound_domestic_connection:false,return_details_available:false};
+ assert.equal(radar.filterOffers([partial],{direct:true,noDomestic:true}).length,1);
+ assert.equal(radar.filterOffers([{...partial,outbound_domestic_connection:true}],{noDomestic:true}).length,0);
+});
